@@ -3,7 +3,6 @@
 package netutils
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -12,7 +11,14 @@ import (
 	"net"
 	"strings"
 
-	"github.com/vishvananda/netlink"
+	"github.com/docker/libnetwork/types"
+)
+
+// constants for the IP address type
+const (
+	IP = iota // IPv4 and IPv6
+	IPv4
+	IPv6
 )
 
 var (
@@ -22,147 +28,7 @@ var (
 	ErrNetworkOverlaps = errors.New("requested network overlaps with existing network")
 	// ErrNoDefaultRoute preformatted error
 	ErrNoDefaultRoute = errors.New("no default route")
-
-	networkGetRoutesFct = netlink.RouteList
 )
-
-// ErrInvalidProtocolBinding is returned when the port binding protocol is not valid.
-type ErrInvalidProtocolBinding string
-
-func (ipb ErrInvalidProtocolBinding) Error() string {
-	return fmt.Sprintf("invalid transport protocol: %s", string(ipb))
-}
-
-// TransportPort represent a local Layer 4 endpoint
-type TransportPort struct {
-	Proto Protocol
-	Port  uint16
-}
-
-// GetCopy returns a copy of this TransportPort structure instance
-func (t *TransportPort) GetCopy() TransportPort {
-	return TransportPort{Proto: t.Proto, Port: t.Port}
-}
-
-// PortBinding represent a port binding between the container an the host
-type PortBinding struct {
-	Proto    Protocol
-	IP       net.IP
-	Port     uint16
-	HostIP   net.IP
-	HostPort uint16
-}
-
-// HostAddr returns the host side transport address
-func (p PortBinding) HostAddr() (net.Addr, error) {
-	switch p.Proto {
-	case UDP:
-		return &net.UDPAddr{IP: p.HostIP, Port: int(p.HostPort)}, nil
-	case TCP:
-		return &net.TCPAddr{IP: p.HostIP, Port: int(p.HostPort)}, nil
-	default:
-		return nil, ErrInvalidProtocolBinding(p.Proto.String())
-	}
-}
-
-// ContainerAddr returns the container side transport address
-func (p PortBinding) ContainerAddr() (net.Addr, error) {
-	switch p.Proto {
-	case UDP:
-		return &net.UDPAddr{IP: p.IP, Port: int(p.Port)}, nil
-	case TCP:
-		return &net.TCPAddr{IP: p.IP, Port: int(p.Port)}, nil
-	default:
-		return nil, ErrInvalidProtocolBinding(p.Proto.String())
-	}
-}
-
-// GetCopy returns a copy of this PortBinding structure instance
-func (p *PortBinding) GetCopy() PortBinding {
-	return PortBinding{
-		Proto:    p.Proto,
-		IP:       GetIPCopy(p.IP),
-		Port:     p.Port,
-		HostIP:   GetIPCopy(p.HostIP),
-		HostPort: p.HostPort,
-	}
-}
-
-// Equal checks if this instance of PortBinding is equal to the passed one
-func (p *PortBinding) Equal(o *PortBinding) bool {
-	if p == o {
-		return true
-	}
-
-	if o == nil {
-		return false
-	}
-
-	if p.Proto != o.Proto || p.Port != o.Port || p.HostPort != o.HostPort {
-		return false
-	}
-
-	if p.IP != nil {
-		if !p.IP.Equal(o.IP) {
-			return false
-		}
-	} else {
-		if o.IP != nil {
-			return false
-		}
-	}
-
-	if p.HostIP != nil {
-		if !p.HostIP.Equal(o.HostIP) {
-			return false
-		}
-	} else {
-		if o.HostIP != nil {
-			return false
-		}
-	}
-
-	return true
-}
-
-const (
-	// ICMP is for the ICMP ip protocol
-	ICMP = 1
-	// TCP is for the TCP ip protocol
-	TCP = 6
-	// UDP is for the UDP ip protocol
-	UDP = 17
-)
-
-// Protocol represents a IP protocol number
-type Protocol uint8
-
-func (p Protocol) String() string {
-	switch p {
-	case ICMP:
-		return "icmp"
-	case TCP:
-		return "tcp"
-	case UDP:
-		return "udp"
-	default:
-		return fmt.Sprintf("%d", p)
-	}
-}
-
-// ParseProtocol returns the respective Protocol type for the passed string
-func ParseProtocol(s string) Protocol {
-	switch strings.ToLower(s) {
-	case "icmp":
-		return ICMP
-	case "udp":
-		return UDP
-	case "tcp":
-		return TCP
-	default:
-		return 0
-	}
-}
 
 // CheckNameserverOverlaps checks whether the passed network overlaps with any of the nameservers
 func CheckNameserverOverlaps(nameservers []string, toCheck *net.IPNet) error {
@@ -180,52 +46,29 @@ func CheckNameserverOverlaps(nameservers []string, toCheck *net.IPNet) error {
 	return nil
 }
 
-// CheckRouteOverlaps checks whether the passed network overlaps with any existing routes
-func CheckRouteOverlaps(toCheck *net.IPNet) error {
-	networks, err := networkGetRoutesFct(nil, netlink.FAMILY_V4)
-	if err != nil {
-		return err
-	}
-
-	for _, network := range networks {
-		if network.Dst != nil && NetworkOverlaps(toCheck, network.Dst) {
-			return ErrNetworkOverlaps
-		}
-	}
-	return nil
-}
-
 // NetworkOverlaps detects overlap between one IPNet and another
 func NetworkOverlaps(netX *net.IPNet, netY *net.IPNet) bool {
-	// Check if both netX and netY are ipv4 or ipv6
-	if (netX.IP.To4() != nil && netY.IP.To4() != nil) ||
-		(netX.IP.To4() == nil && netY.IP.To4() == nil) {
-		if firstIP, _ := NetworkRange(netX); netY.Contains(firstIP) {
-			return true
-		}
-		if firstIP, _ := NetworkRange(netY); netX.Contains(firstIP) {
-			return true
-		}
-	}
-	return false
+	return netX.Contains(netY.IP) || netY.Contains(netX.IP)
 }
 
 // NetworkRange calculates the first and last IP addresses in an IPNet
 func NetworkRange(network *net.IPNet) (net.IP, net.IP) {
-	var netIP net.IP
-	if network.IP.To4() != nil {
-		netIP = network.IP.To4()
-	} else if network.IP.To16() != nil {
-		netIP = network.IP.To16()
-	} else {
+	if network == nil {
 		return nil, nil
 	}
 
-	lastIP := make([]byte, len(netIP), len(netIP))
-	for i := 0; i < len(netIP); i++ {
-		lastIP[i] = netIP[i] | ^network.Mask[i]
+	firstIP := network.IP.Mask(network.Mask)
+	lastIP := types.GetIPCopy(firstIP)
+	for i := 0; i < len(firstIP); i++ {
+		lastIP[i] = firstIP[i] | ^network.Mask[i]
 	}
-	return netIP.Mask(network.Mask), net.IP(lastIP)
+
+	if network.IP.To4() != nil {
+		firstIP = firstIP.To4()
+		lastIP = lastIP.To4()
+	}
+
+	return firstIP, lastIP
 }
 
 // GetIfaceAddr returns the first IPv4 address and slice of IPv6 addresses for the specified network interface
@@ -258,24 +101,34 @@ func GetIfaceAddr(name string) (net.Addr, []net.Addr, error) {
 	return addrs4[0], addrs6, nil
 }
 
-// GenerateRandomMAC returns a new 6-byte(48-bit) hardware address (MAC)
-func GenerateRandomMAC() net.HardwareAddr {
+func genMAC(ip net.IP) net.HardwareAddr {
 	hw := make(net.HardwareAddr, 6)
 	// The first byte of the MAC address has to comply with these rules:
 	// 1. Unicast: Set the least-significant bit to 0.
 	// 2. Address is locally administered: Set the second-least-significant bit (U/L) to 1.
-	// 3. As "small" as possible: The veth address has to be "smaller" than the bridge address.
 	hw[0] = 0x02
 	// The first 24 bits of the MAC represent the Organizationally Unique Identifier (OUI).
 	// Since this address is locally administered, we can do whatever we want as long as
 	// it doesn't conflict with other addresses.
 	hw[1] = 0x42
-	// Randomly generate the remaining 4 bytes (2^32)
-	_, err := rand.Read(hw[2:])
-	if err != nil {
-		return nil
+	// Fill the remaining 4 bytes based on the input
+	if ip == nil {
+		rand.Read(hw[2:])
+	} else {
+		copy(hw[2:], ip.To4())
 	}
 	return hw
+}
+
+// GenerateRandomMAC returns a new 6-byte(48-bit) hardware address (MAC)
+func GenerateRandomMAC() net.HardwareAddr {
+	return genMAC(nil)
+}
+
+// GenerateMACFromIP returns a locally administered MAC address where the 4 least
+// significant bytes are derived from the IPv4 address.
+func GenerateMACFromIP(ip net.IP) net.HardwareAddr {
+	return genMAC(ip)
 }
 
 // GenerateRandomName returns a new name joined with a prefix.  This size
@@ -288,37 +141,61 @@ func GenerateRandomName(prefix string, size int) (string, error) {
 	return prefix + hex.EncodeToString(id)[:size], nil
 }
 
-// GetMacCopy returns a copy of the passed MAC address
-func GetMacCopy(from net.HardwareAddr) net.HardwareAddr {
-	to := make(net.HardwareAddr, len(from))
-	copy(to, from)
-	return to
+// ReverseIP accepts a V4 or V6 IP string in the canonical form and returns a reversed IP in
+// the dotted decimal form . This is used to setup the IP to service name mapping in the optimal
+// way for the DNS PTR queries.
+func ReverseIP(IP string) string {
+	var reverseIP []string
+
+	if net.ParseIP(IP).To4() != nil {
+		reverseIP = strings.Split(IP, ".")
+		l := len(reverseIP)
+		for i, j := 0, l-1; i < l/2; i, j = i+1, j-1 {
+			reverseIP[i], reverseIP[j] = reverseIP[j], reverseIP[i]
+		}
+	} else {
+		reverseIP = strings.Split(IP, ":")
+
+		// Reversed IPv6 is represented in dotted decimal instead of the typical
+		// colon hex notation
+		for key := range reverseIP {
+			if len(reverseIP[key]) == 0 { // expand the compressed 0s
+				reverseIP[key] = strings.Repeat("0000", 8-strings.Count(IP, ":"))
+			} else if len(reverseIP[key]) < 4 { // 0-padding needed
+				reverseIP[key] = strings.Repeat("0", 4-len(reverseIP[key])) + reverseIP[key]
+			}
+		}
+
+		reverseIP = strings.Split(strings.Join(reverseIP, ""), "")
+
+		l := len(reverseIP)
+		for i, j := 0, l-1; i < l/2; i, j = i+1, j-1 {
+			reverseIP[i], reverseIP[j] = reverseIP[j], reverseIP[i]
+		}
+	}
+
+	return strings.Join(reverseIP, ".")
 }
 
-// GetIPCopy returns a copy of the passed IP address
-func GetIPCopy(from net.IP) net.IP {
-	to := make(net.IP, len(from))
-	copy(to, from)
-	return to
+// ParseAlias parses and validates the specified string as a alias format (name:alias)
+func ParseAlias(val string) (string, string, error) {
+	if val == "" {
+		return "", "", fmt.Errorf("empty string specified for alias")
+	}
+	arr := strings.Split(val, ":")
+	if len(arr) > 2 {
+		return "", "", fmt.Errorf("bad format for alias: %s", val)
+	}
+	if len(arr) == 1 {
+		return val, val, nil
+	}
+	return arr[0], arr[1], nil
 }
 
-// GetIPNetCopy returns a copy of the passed IP Network
-func GetIPNetCopy(from *net.IPNet) *net.IPNet {
-	if from == nil {
-		return nil
+// ValidateAlias validates that the specified string has a valid alias format (containerName:alias).
+func ValidateAlias(val string) (string, error) {
+	if _, _, err := ParseAlias(val); err != nil {
+		return val, err
 	}
-	bm := make(net.IPMask, len(from.Mask))
-	copy(bm, from.Mask)
-	return &net.IPNet{IP: GetIPCopy(from.IP), Mask: bm}
-}
-
-// CompareIPNet returns equal if the two IP Networks are equal
-func CompareIPNet(a, b *net.IPNet) bool {
-	if a == b {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	return a.IP.Equal(b.IP) && bytes.Equal(a.Mask, b.Mask)
+	return val, nil
 }

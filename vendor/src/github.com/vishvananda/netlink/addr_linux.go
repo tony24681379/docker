@@ -9,6 +9,9 @@ import (
 	"github.com/vishvananda/netlink/nl"
 )
 
+// IFA_FLAGS is a u32 attribute.
+const IFA_FLAGS = 0x8
+
 // AddrAdd will add an IP address to a link device.
 // Equivalent to: `ip addr add $addr dev $link`
 func AddrAdd(link Link, addr *Addr) error {
@@ -35,6 +38,7 @@ func addrHandle(link Link, addr *Addr, req *nl.NetlinkRequest) error {
 
 	msg := nl.NewIfAddrmsg(family)
 	msg.Index = uint32(base.Index)
+	msg.Scope = uint8(addr.Scope)
 	prefixlen, _ := addr.Mask.Size()
 	msg.Prefixlen = uint8(prefixlen)
 	req.AddData(msg)
@@ -51,6 +55,13 @@ func addrHandle(link Link, addr *Addr, req *nl.NetlinkRequest) error {
 
 	addressData := nl.NewRtAttr(syscall.IFA_ADDRESS, addrData)
 	req.AddData(addressData)
+
+	if addr.Flags != 0 {
+		b := make([]byte, 4)
+		native.PutUint32(b, uint32(addr.Flags))
+		flagsData := nl.NewRtAttr(IFA_FLAGS, b)
+		req.AddData(flagsData)
+	}
 
 	if addr.Label != "" {
 		labelData := nl.NewRtAttr(syscall.IFA_LABEL, nl.ZeroTerminated(addr.Label))
@@ -81,7 +92,7 @@ func AddrList(link Link, family int) ([]Addr, error) {
 		index = base.Index
 	}
 
-	res := make([]Addr, 0)
+	var res []Addr
 	for _, m := range msgs {
 		msg := nl.DeserializeIfAddrmsg(m)
 
@@ -95,18 +106,35 @@ func AddrList(link Link, family int) ([]Addr, error) {
 			return nil, err
 		}
 
+		var local, dst *net.IPNet
 		var addr Addr
 		for _, attr := range attrs {
 			switch attr.Attr.Type {
 			case syscall.IFA_ADDRESS:
-				addr.IPNet = &net.IPNet{
+				dst = &net.IPNet{
+					IP:   attr.Value,
+					Mask: net.CIDRMask(int(msg.Prefixlen), 8*len(attr.Value)),
+				}
+			case syscall.IFA_LOCAL:
+				local = &net.IPNet{
 					IP:   attr.Value,
 					Mask: net.CIDRMask(int(msg.Prefixlen), 8*len(attr.Value)),
 				}
 			case syscall.IFA_LABEL:
 				addr.Label = string(attr.Value[:len(attr.Value)-1])
+			case IFA_FLAGS:
+				addr.Flags = int(native.Uint32(attr.Value[0:4]))
 			}
 		}
+
+		// IFA_LOCAL should be there but if not, fall back to IFA_ADDRESS
+		if local != nil {
+			addr.IPNet = local
+		} else {
+			addr.IPNet = dst
+		}
+		addr.Scope = int(msg.Scope)
+
 		res = append(res, addr)
 	}
 

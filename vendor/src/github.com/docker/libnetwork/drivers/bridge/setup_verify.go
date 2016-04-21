@@ -1,8 +1,12 @@
 package bridge
 
-import "github.com/vishvananda/netlink"
+import (
+	log "github.com/Sirupsen/logrus"
+	"github.com/docker/libnetwork/types"
+	"github.com/vishvananda/netlink"
+)
 
-func setupVerifyAndReconcile(config *NetworkConfiguration, i *bridgeInterface) error {
+func setupVerifyAndReconcile(config *networkConfiguration, i *bridgeInterface) error {
 	// Fetch a single IPv4 and a slice of IPv6 addresses from the bridge.
 	addrv4, addrsv6, err := i.addresses()
 	if err != nil {
@@ -11,12 +15,12 @@ func setupVerifyAndReconcile(config *NetworkConfiguration, i *bridgeInterface) e
 
 	// Verify that the bridge does have an IPv4 address.
 	if addrv4.IPNet == nil {
-		return ErrNoIPAddr
+		return &ErrNoIPAddr{}
 	}
 
 	// Verify that the bridge IPv4 address matches the requested configuration.
 	if config.AddressIPv4 != nil && !addrv4.IP.Equal(config.AddressIPv4.IP) {
-		return &IPv4AddrNoMatchError{ip: addrv4.IP, cfgIP: config.AddressIPv4.IP}
+		return &IPv4AddrNoMatchError{IP: addrv4.IP, CfgIP: config.AddressIPv4.IP}
 	}
 
 	// Verify that one of the bridge IPv6 addresses matches the requested
@@ -25,11 +29,14 @@ func setupVerifyAndReconcile(config *NetworkConfiguration, i *bridgeInterface) e
 		return (*IPv6AddrNoMatchError)(bridgeIPv6)
 	}
 
-	// By this time we have either configured a new bridge with an IP address
-	// or made sure an existing bridge's IP matches the configuration
-	// Now is the time to cache these states in the bridgeInterface.
-	i.bridgeIPv4 = addrv4.IPNet
-	i.bridgeIPv6 = bridgeIPv6
+	// Release any residual IPv6 address that might be there because of older daemon instances
+	for _, addrv6 := range addrsv6 {
+		if addrv6.IP.IsGlobalUnicast() && !types.CompareIPNet(addrv6.IPNet, i.bridgeIPv6) {
+			if err := netlink.AddrDel(i.Link, &addrv6); err != nil {
+				log.Warnf("Failed to remove residual IPv6 address %s from bridge: %v", addrv6.IPNet, err)
+			}
+		}
+	}
 
 	return nil
 }

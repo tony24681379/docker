@@ -6,13 +6,13 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/libnetwork/iptables"
-	"github.com/docker/libnetwork/netutils"
+	"github.com/docker/libnetwork/types"
 )
 
 type link struct {
 	parentIP string
 	childIP  string
-	ports    []netutils.TransportPort
+	ports    []types.TransportPort
 	bridge   string
 }
 
@@ -20,7 +20,7 @@ func (l *link) String() string {
 	return fmt.Sprintf("%s <-> %s [%v] on %s", l.parentIP, l.childIP, l.ports, l.bridge)
 }
 
-func newLink(parentIP, childIP string, ports []netutils.TransportPort, bridge string) *link {
+func newLink(parentIP, childIP string, ports []types.TransportPort, bridge string) *link {
 	return &link{
 		childIP:  childIP,
 		parentIP: parentIP,
@@ -32,7 +32,12 @@ func newLink(parentIP, childIP string, ports []netutils.TransportPort, bridge st
 
 func (l *link) Enable() error {
 	// -A == iptables append flag
-	return linkContainers("-A", l.parentIP, l.childIP, l.ports, l.bridge, false)
+	linkFunction := func() error {
+		return linkContainers("-A", l.parentIP, l.childIP, l.ports, l.bridge, false)
+	}
+
+	iptables.OnReloaded(func() { linkFunction() })
+	return linkFunction()
 }
 
 func (l *link) Disable() {
@@ -45,7 +50,7 @@ func (l *link) Disable() {
 	// that returns typed errors
 }
 
-func linkContainers(action, parentIP, childIP string, ports []netutils.TransportPort, bridge string,
+func linkContainers(action, parentIP, childIP string, ports []types.TransportPort, bridge string,
 	ignoreErrors bool) error {
 	var nfAction iptables.Action
 
@@ -57,7 +62,7 @@ func linkContainers(action, parentIP, childIP string, ports []netutils.Transport
 	case "-D":
 		nfAction = iptables.Delete
 	default:
-		return invalidIPTablesCfgError(action)
+		return InvalidIPTablesCfgError(action)
 	}
 
 	ip1 := net.ParseIP(parentIP)
@@ -69,9 +74,9 @@ func linkContainers(action, parentIP, childIP string, ports []netutils.Transport
 		return InvalidLinkIPAddrError(childIP)
 	}
 
-	chain := iptables.Chain{Name: DockerChain, Bridge: bridge}
+	chain := iptables.ChainInfo{Name: DockerChain}
 	for _, port := range ports {
-		err := chain.Link(nfAction, ip1, ip2, int(port.Port), port.Proto.String())
+		err := chain.Link(nfAction, ip1, ip2, int(port.Port), port.Proto.String(), bridge)
 		if !ignoreErrors && err != nil {
 			return err
 		}
