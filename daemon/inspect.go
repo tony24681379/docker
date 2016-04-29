@@ -118,7 +118,7 @@ func (daemon *Daemon) getInspectData(container *container.Container, size bool) 
 		hostConfig.LogConfig.Config = daemon.defaultLogConfig.Config
 	}
 
-	containerState := &types.ContainerState{
+	containerStateBase := &types.ContainerStateBase {
 		Status:     container.State.StateString(),
 		Running:    container.State.Running,
 		Paused:     container.State.Paused,
@@ -131,6 +131,8 @@ func (daemon *Daemon) getInspectData(container *container.Container, size bool) 
 		StartedAt:  container.State.StartedAt.Format(time.RFC3339Nano),
 		FinishedAt: container.State.FinishedAt.Format(time.RFC3339Nano),
 	}
+	
+	containerState := addExperimentalState(container, containerStateBase )
 
 	contJSONBase := &types.ContainerJSONBase{
 		ID:           container.ID,

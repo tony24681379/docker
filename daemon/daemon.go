@@ -929,6 +929,23 @@ func (daemon *Daemon) Run(c *container.Container, pipes *execdriver.Pipes, start
 	return daemon.execDriver.Run(c.Command, pipes, hooks)
 }
 
+// Checkpoint the container
+func (daemon *Daemon) Checkpoint(c *container.Container, opts *types.CriuConfig) error {
+	return daemon.execDriver.Checkpoint(c.Command, opts)
+}
+
+// Restore the container
+func (daemon *Daemon) Restore(c *container.Container, pipes *execdriver.Pipes, restoreCallback execdriver.DriverCallback, opts *types.CriuConfig, forceRestore bool) (execdriver.ExitStatus, error) {
+	hooks := execdriver.Hooks{
+		Restore: restoreCallback,
+	}
+	hooks.PreStart = append(hooks.PreStart, func(processConfig *execdriver.ProcessConfig, pid int, chOOM <-chan struct{}) error {
+		return daemon.setNetworkNamespaceKey(c.ID, pid)
+	})
+	exitCode, err := daemon.execDriver.Restore(c.Command, pipes, hooks, opts, forceRestore)
+	return exitCode, err
+}
+
 func (daemon *Daemon) kill(c *container.Container, sig int) error {
 	return daemon.execDriver.Kill(c.Command, sig)
 }

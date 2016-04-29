@@ -7,6 +7,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"fmt"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/execdriver"
@@ -14,6 +15,7 @@ import (
 	"github.com/docker/docker/pkg/promise"
 	"github.com/docker/docker/pkg/stringid"
 	"github.com/docker/docker/utils"
+	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 )
 
@@ -32,6 +34,8 @@ type supervisor interface {
 	StartLogging(*Container) error
 	// Run starts a container
 	Run(c *Container, pipes *execdriver.Pipes, startCallback execdriver.DriverCallback) (execdriver.ExitStatus, error)
+	// Restore restores a container that was previously checkpointed
+	Restore(c *Container, pipes *execdriver.Pipes, restoreCallback execdriver.DriverCallback, opts *types.CriuConfig, forceRestore bool) (execdriver.ExitStatus, error)
 	// IsShuttingDown tells whether the supervisor is shutting down or not
 	IsShuttingDown() bool
 }
@@ -68,6 +72,9 @@ type containerMonitor struct {
 	// next restart so that the timeIncrement is not honored and the user is not
 	// left waiting for nothing to happen during this time
 	stopChan chan struct{}
+	
+	// like startSignal but for restoring a container
+	restoreSignal chan struct{}
 
 	// timeIncrement is the amount of time to wait between restarts
 	// this is in milliseconds
@@ -87,6 +94,7 @@ func (container *Container) StartMonitor(s supervisor, policy container.RestartP
 		timeIncrement: defaultTimeIncrement,
 		stopChan:      make(chan struct{}),
 		startSignal:   make(chan struct{}),
+		restoreSignal: make(chan struct{}),
 	}
 
 	return container.monitor.wait()
@@ -99,6 +107,38 @@ func (m *containerMonitor) wait() error {
 	select {
 	case <-m.startSignal:
 	case err := <-promise.Go(m.start):
+		return err
+	}
+
+	return nil
+}
+
+// RestoreMonitor initializes a containerMonitor for this container with the provided supervisor
+// and restart policy and restores the container's process.
+func (container *Container) RestoreMonitor(s supervisor, policy container.RestartPolicy, opts *types.CriuConfig, forceRestore bool) error {
+	container.monitor = &containerMonitor{
+		supervisor:    s,
+		container:     container,
+		restartPolicy: policy,
+		timeIncrement: defaultTimeIncrement,
+		stopChan:      make(chan struct{}),
+		startSignal:   make(chan struct{}),
+		restoreSignal: make(chan struct{}),
+	}
+
+	return container.monitor.waitForRestore(container, opts, forceRestore)
+}
+
+// waitForRestore starts the container and wait until
+// we either receive an error from the restore process
+// or until the process is running in the container
+func (m *containerMonitor) waitForRestore(container *Container, opts *types.CriuConfig, forceRestore bool) error {
+	select {
+	case <-m.restoreSignal:
+		if container.ExitCode != 0 {
+			return fmt.Errorf("restore process failed")
+		}
+	case err := <-promise.Go(func() error { return m.Restore(opts, forceRestore) }):
 		return err
 	}
 
@@ -140,13 +180,29 @@ func (m *containerMonitor) Close() error {
 
 // Start starts the containers process and monitors it according to the restart policy
 func (m *containerMonitor) start() error {
+	return m.startOrRestore(nil, false)
+}
+
+// Restore restores the containers from an image and monitors it according to the restart policy
+func (m *containerMonitor) Restore(restoreOpts *types.CriuConfig, forceRestore bool) error {
+	return m.startOrRestore(restoreOpts, forceRestore)
+}
+
+// startOrRestore is an Internal method to start or restore a container and monitor it
+func (m *containerMonitor) startOrRestore(restoreOpts *types.CriuConfig, forceRestore bool) error {
 	var (
 		err        error
 		exitStatus execdriver.ExitStatus
 		// this variable indicates where we in execution flow:
 		// before Run or after
-		afterRun bool
+		afterRun    bool
+		isRestoring bool
 	)
+	
+	// we only want to restore once, but upon restart we should simply
+	// start the container normally, so isRestoring tells us where we are,
+	// and the initial value is whether or not we were provided restore opts
+	isRestoring = restoreOpts != nil
 
 	// ensure that when the monitor finally exits we release the networking and unmount the rootfs
 	defer func() {
@@ -168,10 +224,12 @@ func (m *containerMonitor) start() error {
 	for {
 		m.container.RestartCount++
 
-		if err := m.supervisor.StartLogging(m.container); err != nil {
-			m.resetContainer(false)
+		if m.container.LogDriver == nil {
+			if err := m.supervisor.StartLogging(m.container); err != nil {
+				m.resetContainer(false)
 
-			return err
+				return err
+			}
 		}
 
 		pipes := execdriver.NewPipes(m.container.Stdin(), m.container.Stdout(), m.container.Stderr(), m.container.Config.OpenStdin)
@@ -180,7 +238,18 @@ func (m *containerMonitor) start() error {
 
 		m.lastStartTime = time.Now()
 
-		if exitStatus, err = m.supervisor.Run(m.container, pipes, m.callback); err != nil {
+		if isRestoring {
+			m.logEvent("restore")
+
+			exitStatus, err = m.supervisor.Restore(m.container, pipes, m.restoreCallback, restoreOpts, forceRestore)
+			isRestoring = false
+		} else {
+			m.logEvent("start")
+
+			exitStatus, err = m.supervisor.Run(m.container, pipes, m.callback)
+		}
+
+		if err != nil {
 			// if we receive an internal error from the initial start of a container then lets
 			// return it instead of entering the restart loop
 			// set to 127 for container cmd not found/does not exist)
@@ -331,6 +400,47 @@ func (m *containerMonitor) callback(processConfig *execdriver.ProcessConfig, pid
 	if err := m.container.ToDiskLocking(); err != nil {
 		logrus.Errorf("Error saving container to disk: %v", err)
 	}
+	return nil
+}
+
+// restoreCallback is like callback(), but for restoring a container.
+func (m *containerMonitor) restoreCallback(processConfig *execdriver.ProcessConfig, restorePid int, chOOM <-chan struct{}) error {
+	go func() {
+		_, ok := <-chOOM
+		if ok {
+			m.logEvent("oom")
+		}
+	}()
+
+	if processConfig.Tty {
+		// The callback is called after the process Start()
+		// so we are in the parent process. In TTY mode, stdin/out/err is the PtySlave
+		// which we close here.
+		if c, ok := processConfig.Stdout.(io.Closer); ok {
+			c.Close()
+		}
+	}
+
+	// If restorePid is 0, it means that restore failed.
+	if restorePid != 0 {
+		m.container.SetRunning(restorePid)
+	}
+
+	// Unblock the goroutine waiting in waitForRestore().
+	select {
+	case <-m.restoreSignal:
+	default:
+		close(m.restoreSignal)
+	}
+
+	if restorePid != 0 {
+		// Write config.json and hostconfig.json files
+		// to /var/lib/docker/containers/<ID>.
+		if err := m.container.ToDiskLocking(); err != nil {
+			logrus.Errorf("Error saving container to disk: %s", err)
+		}
+	}
+
 	return nil
 }
 

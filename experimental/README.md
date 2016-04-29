@@ -73,6 +73,7 @@ to build a Docker binary with the experimental features enabled:
 
  * [External graphdriver plugins](plugins_graphdriver.md)
  * The user namespaces feature has graduated from experimental.
+ * [Checkpoint & Restore](checkpoint_restore.md)
 
 ## How to comment on an experimental feature
 
