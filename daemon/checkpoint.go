@@ -20,16 +20,16 @@ func (daemon *Daemon) ContainerCheckpoint(name string, opts *types.CriuConfig) e
 
 	if opts.ImagesDirectory == "" {
 		opts.ImagesDirectory = filepath.Join(container.Root, "criu.image")
-		if err := os.MkdirAll(opts.ImagesDirectory, 0755); err != nil && !os.IsExist(err) {
-			return err
-		}
+	}
+	if err := os.MkdirAll(opts.ImagesDirectory, 0755); err != nil && !os.IsExist(err) {
+		return err
 	}
 
 	if opts.WorkDirectory == "" {
 		opts.WorkDirectory = filepath.Join(container.Root, "criu.work")
-		if err := os.MkdirAll(opts.WorkDirectory, 0755); err != nil && !os.IsExist(err) {
-			return err
-		}
+	}
+	if err := os.MkdirAll(opts.WorkDirectory, 0755); err != nil && !os.IsExist(err) {
+		return err
 	}
 
 	if err := daemon.Checkpoint(container, opts); err != nil {
