@@ -60,10 +60,6 @@ func (s *State) String() string {
 	if s.RemovalInProgress {
 		return "Removal In Progress"
 	}
-	
-	if s.Checkpointed {
-		return "checkpointed"
-	}
 
 	if s.Dead {
 		return "Dead"
@@ -90,6 +86,10 @@ func (s *State) StateString() string {
 			return "restarting"
 		}
 		return "running"
+	}
+	
+	if s.Checkpointed {
+		return "checkpointed"
 	}
 
 	if s.Dead {
