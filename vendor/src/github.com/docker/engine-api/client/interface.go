@@ -29,6 +29,7 @@ type APIClient interface {
 	ContainerKill(containerID, signal string) error
 	ContainerList(options types.ContainerListOptions) ([]types.Container, error)
 	ContainerLogs(options types.ContainerLogsOptions) (io.ReadCloser, error)
+	ContainerMigrate(containerID string, filters types.MigrateFiltersConfig) error
 	ContainerPause(containerID string) error
 	ContainerRemove(options types.ContainerRemoveOptions) error
 	ContainerRename(containerID, newContainerName string) error

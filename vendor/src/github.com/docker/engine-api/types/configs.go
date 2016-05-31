@@ -45,10 +45,10 @@ type CriuConfig struct {
 	LeaveRunning    bool
 }
 
-// RestoreConfig holds the restore command options, which is a superset of the CRIU options
-type RestoreConfig struct {
-	CriuOpts     CriuConfig
-	ForceRestore bool
+// MigrateFiltersConfig holds configuration options passed down to swarm filters
+type MigrateFiltersConfig struct {
+	EnvVariables []string
+	Labels       map[string]string
 }
 
 // ExecConfig is a small subset of the Config struct that hold the configuration
