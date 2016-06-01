@@ -16,7 +16,7 @@ import (
 //
 // Usage: docker migrate CONTAINER
 func (cli *DockerCli) CmdMigrate(args ...string) error {
-	cmd := Cli.Subcmd("CmdMigrate", []string{"CONTAINER"}, Cli.DockerCommands["migrate"].Description, true)
+	cmd := Cli.Subcmd("migrate", []string{"CONTAINER"}, Cli.DockerCommands["migrate"].Description, true)
 	flEnv := opts.NewListOpts(runconfigopts.ValidateEnv)
 	flLabels := opts.NewListOpts(runconfigopts.ValidateEnv)
 	flEnvFile := opts.NewListOpts(nil)
