@@ -14,8 +14,9 @@ import (
 
 func addExperimentalRoutes(r *router) {
 	newRoutes := []dkrouter.Route{
-		NewPostRoute("/containers/{name:.*}/checkpoint", r.postContainersCheckpoint),
+		NewPostRoute("/checkpoints/{name:.*}/checkpoint", r.postContainersCheckpoint),
 		NewPostRoute("/containers/{name:.*}/restore", r.postContainersRestore),
+		NewDeleteRoute("/checkpoints/{name:.*}/checkpoint", r.deleteContainersCheckpoint),
 	}
 
 	r.routes = append(r.routes, newRoutes...)
@@ -31,7 +32,7 @@ func (s *router) postContainersCheckpoint(ctx context.Context, w http.ResponseWr
 		return err
 	}
 
-	if err := s.daemon.ContainerCheckpoint(vars["name"], criuOpts); err != nil {
+	if err := s.daemon.CheckpointCreate(vars["name"], criuOpts); err != nil {
 		return err
 	}
 
@@ -56,6 +57,19 @@ func (s *router) postContainersRestore(ctx context.Context, w http.ResponseWrite
 		return err
 	}
 
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+func (s *router) deleteContainersCheckpoint(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := httputils.ParseForm(r); err != nil {
+		return err
+	}
+
+	imgDir := r.Form.Get("imgDir")
+	if err := s.daemon.CheckpointRemove(vars["name"], imgDir); err != nil {
+		return err
+	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }

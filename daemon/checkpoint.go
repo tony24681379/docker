@@ -8,8 +8,8 @@ import (
 	"github.com/docker/engine-api/types"
 )
 
-// ContainerCheckpoint checkpoints the process running in a container with CRIU
-func (daemon *Daemon) ContainerCheckpoint(name string, opts *types.CriuConfig) error {
+// CheckpointCreate checkpoints the process running in a container with CRIU
+func (daemon *Daemon) CheckpointCreate(name string, opts *types.CriuConfig) error {
 	container, err := daemon.GetContainer(name)
 	if err != nil {
 		return err
@@ -26,7 +26,7 @@ func (daemon *Daemon) ContainerCheckpoint(name string, opts *types.CriuConfig) e
 	}
 
 	if opts.WorkDirectory == "" {
-		opts.WorkDirectory = filepath.Join(container.Root, "criu.work")
+		opts.WorkDirectory = filepath.Join(opts.ImagesDirectory, "criu.work")
 	}
 	if err := os.MkdirAll(opts.WorkDirectory, 0755); err != nil && !os.IsExist(err) {
 		return err
@@ -45,6 +45,23 @@ func (daemon *Daemon) ContainerCheckpoint(name string, opts *types.CriuConfig) e
 
 	if err := container.ToDisk(); err != nil {
 		return fmt.Errorf("Cannot update config for container: %s", err)
+	}
+
+	return nil
+}
+
+// CheckpointRemove remove container checkpoint
+func (daemon *Daemon) CheckpointRemove(name string, imagesDirectory string) error {
+	container, err := daemon.GetContainer(name)
+	if err != nil {
+		return err
+	}
+
+	if imagesDirectory == "" {
+		imagesDirectory = filepath.Join(container.Root, "criu.image")
+	}
+	if err := os.RemoveAll(imagesDirectory); err != nil && !os.IsExist(err) {
+		return err
 	}
 
 	return nil

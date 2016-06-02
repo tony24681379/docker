@@ -5,9 +5,9 @@ package client
 import (
 	"fmt"
 
-	"github.com/docker/engine-api/types"
 	Cli "github.com/docker/docker/cli"
 	flag "github.com/docker/docker/pkg/mflag"
+	"github.com/docker/engine-api/types"
 )
 
 // CmdRestore restores the process in a checkpointed container
@@ -20,7 +20,7 @@ func (cli *DockerCli) CmdRestore(args ...string) error {
 	flForce := cmd.Bool([]string{"-force"}, false, "bypass checks for current container state")
 
 	cmd.Require(flag.Min, 1)
-	cmd.ParseFlags(args, true);
+	cmd.ParseFlags(args, true)
 
 	if cmd.NArg() < 1 {
 		cmd.Usage()
@@ -32,15 +32,13 @@ func (cli *DockerCli) CmdRestore(args ...string) error {
 		WorkDirectory:   *flWorkDir,
 	}
 
-	var encounteredError error
-	for _, name := range cmd.Args() {
-		err := cli.client.ContainerRestore(name, criuOpts, *flForce)
-		if err != nil {
-			fmt.Fprintf(cli.err, "%s\n", err)
-			encounteredError = fmt.Errorf("Error: failed to restore one or more containers")
-		} else {
-			fmt.Fprintf(cli.out, "%s\n", name)
-		}
+	name := cmd.Arg(0)
+	err := cli.client.ContainerRestore(name, criuOpts, *flForce)
+	if err != nil {
+		fmt.Fprintf(cli.err, "%s\n", err)
+		return fmt.Errorf("Error: failed to restore one or more containers")
 	}
-	return encounteredError
+
+	fmt.Fprintf(cli.out, "%s\n", name)
+	return nil
 }

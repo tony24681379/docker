@@ -13,8 +13,9 @@ import (
 // APIClient is an interface that clients that talk with a docker server must implement.
 type APIClient interface {
 	ClientVersion() string
+	CheckpointCreate(containerID string, options types.CriuConfig) error
+	CheckpointDelete(containerID string, imgDir string) error
 	ContainerAttach(options types.ContainerAttachOptions) (types.HijackedResponse, error)
-	ContainerCheckpoint(containerID string, options types.CriuConfig) error
 	ContainerCommit(options types.ContainerCommitOptions) (types.ContainerCommitResponse, error)
 	ContainerCreate(config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, containerName string) (types.ContainerCreateResponse, error)
 	ContainerDiff(containerID string) ([]types.ContainerChange, error)
