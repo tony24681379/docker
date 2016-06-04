@@ -52,17 +52,15 @@ func (cli *DockerCli) CmdMigrate(args ...string) error {
 		Labels:       runconfigopts.ConvertKVStringsToMap(labels),
 	}
 
-	var encounteredError error
-	for _, name := range cmd.Args() {
-		err := cli.client.ContainerMigrate(name, filters)
-		if err != nil {
-			fmt.Fprintf(cli.err, "%s\n", err)
-			encounteredError = fmt.Errorf("Error: failed to migrate one or more containers")
-		} else {
-			fmt.Fprintf(cli.out, "%s\n", name)
-		}
+	name := cmd.Arg(0)
+	err := cli.client.ContainerMigrate(name, filters)
+	if err != nil {
+		fmt.Fprintf(cli.err, "%s\n", err)
+		return fmt.Errorf("Error: failed to migrate one or more containers")
 	}
-	return encounteredError
+
+	fmt.Fprintf(cli.out, "%s\n", name)
+	return nil
 }
 
 // reads a file of line terminated key=value pairs and override that with override parameter
