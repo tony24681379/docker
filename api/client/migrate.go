@@ -53,8 +53,7 @@ func (cli *DockerCli) CmdMigrate(args ...string) error {
 	}
 
 	name := cmd.Arg(0)
-	err := cli.client.ContainerMigrate(name, filters)
-	if err != nil {
+	if err := cli.client.ContainerMigrate(name, filters); err != nil {
 		fmt.Fprintf(cli.err, "%s\n", err)
 		return fmt.Errorf("Error: failed to migrate one or more containers")
 	}
