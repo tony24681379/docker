@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/docker/engine-api/types"
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/execdriver"
 	"github.com/docker/docker/pkg/parsers"
@@ -22,6 +21,7 @@ import (
 	"github.com/docker/docker/pkg/reexec"
 	sysinfo "github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/pkg/term"
+	"github.com/docker/engine-api/types"
 	"github.com/opencontainers/runc/libcontainer"
 	"github.com/opencontainers/runc/libcontainer/apparmor"
 	"github.com/opencontainers/runc/libcontainer/cgroups/systemd"
@@ -331,10 +331,13 @@ func libcontainerCriuOpts(containerOpts *types.CriuConfig) *libcontainer.CriuOpt
 		ImagesDirectory:         containerOpts.ImagesDirectory,
 		WorkDirectory:           containerOpts.WorkDirectory,
 		LeaveRunning:            containerOpts.LeaveRunning,
+		PrevImagesDirectory:     containerOpts.PrevImagesDirectory,
+		PreDump:                 containerOpts.PreDump,
+		TrackMem:                containerOpts.TrackMem,
 		TcpEstablished:          true,
 		ExternalUnixConnections: true,
 		FileLocks:               true,
-		EmptyNs:		 syscall.CLONE_NEWNET,
+		EmptyNs:                 syscall.CLONE_NEWNET,
 	}
 }
 

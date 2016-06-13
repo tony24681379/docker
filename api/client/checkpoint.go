@@ -17,6 +17,9 @@ func (cli *DockerCli) CmdCheckpoint(args ...string) error {
 	cmd := Cli.Subcmd("checkpoint", []string{"CONTAINER"}, Cli.DockerCommands["checkpoint"].Description, true)
 	flImgDir := cmd.String([]string{"-image-dir"}, "", "directory for storing checkpoint image files")
 	flWorkDir := cmd.String([]string{"-work-dir"}, "", "directory for storing log file")
+	flPrevImagesDir := cmd.String([]string{"-prev-image-dir"}, "", "directory for storing prev-image files")
+	flPreDump := cmd.Bool([]string{"-pre-dump"}, false, "pre-dump task(s) minimizing their frozen time")
+	flTrackMem := cmd.Bool([]string{"-track-mem"}, false, "turn on memory changes tracker in kernel")
 	flLeaveRunning := cmd.Bool([]string{"-leave-running"}, false, "leave the container running after checkpoint")
 
 	cmd.Require(flag.Min, 1)
@@ -29,9 +32,12 @@ func (cli *DockerCli) CmdCheckpoint(args ...string) error {
 	}
 
 	criuOpts := types.CriuConfig{
-		ImagesDirectory: *flImgDir,
-		WorkDirectory:   *flWorkDir,
-		LeaveRunning:    *flLeaveRunning,
+		ImagesDirectory:     *flImgDir,
+		WorkDirectory:       *flWorkDir,
+		PrevImagesDirectory: *flPrevImagesDir,
+		PreDump:             *flPreDump,
+		TrackMem:            *flTrackMem,
+		LeaveRunning:        *flLeaveRunning,
 	}
 
 	name := cmd.Arg(0)

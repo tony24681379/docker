@@ -175,8 +175,8 @@ func (s *Server) makeHTTPHandler(handler httputils.APIFunc) http.HandlerFunc {
 
 // InitRouters initializes a list of routers for the server.
 func (s *Server) InitRouters(d *daemon.Daemon) {
-	s.addRouter(container.NewRouter(d))
 	s.addRouter(local.NewRouter(d))
+	s.addRouter(container.NewRouter(d))
 	s.addRouter(network.NewRouter(d))
 	s.addRouter(system.NewRouter(d))
 	s.addRouter(volume.NewRouter(d))

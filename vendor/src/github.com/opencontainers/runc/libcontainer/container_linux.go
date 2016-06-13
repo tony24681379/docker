@@ -121,7 +121,6 @@ func (c *linuxContainer) Configp() *configs.Config {
 	return c.config
 }
 
-
 func (c *linuxContainer) Status() (Status, error) {
 	c.m.Lock()
 	defer c.m.Unlock()
@@ -498,6 +497,7 @@ func (c *linuxContainer) Checkpoint(criuOpts *CriuOpts) error {
 	rpcOpts := criurpc.CriuOpts{
 		ImagesDirFd:    proto.Int32(int32(imageDir.Fd())),
 		WorkDirFd:      proto.Int32(int32(workDir.Fd())),
+		TrackMem:       proto.Bool(criuOpts.TrackMem),
 		LogLevel:       proto.Int32(4),
 		LogFile:        proto.String("dump.log"),
 		Root:           proto.String(c.config.Rootfs),
@@ -509,7 +509,11 @@ func (c *linuxContainer) Checkpoint(criuOpts *CriuOpts) error {
 		TcpEstablished: proto.Bool(criuOpts.TcpEstablished),
 		ExtUnixSk:      proto.Bool(criuOpts.ExternalUnixConnections),
 		FileLocks:      proto.Bool(criuOpts.FileLocks),
-		EmptyNs:	    proto.Uint32(criuOpts.EmptyNs),
+		EmptyNs:        proto.Uint32(criuOpts.EmptyNs),
+	}
+
+	if criuOpts.PrevImagesDirectory != "" {
+		rpcOpts.ParentImg = proto.String(criuOpts.PrevImagesDirectory)
 	}
 
 	// append optional criu opts, e.g., page-server and port
@@ -530,7 +534,13 @@ func (c *linuxContainer) Checkpoint(criuOpts *CriuOpts) error {
 		rpcOpts.ManageCgroupsMode = &mode
 	}
 
-	t := criurpc.CriuReqType_DUMP
+	var t criurpc.CriuReqType
+
+	if criuOpts.PreDump {
+		t = criurpc.CriuReqType_PRE_DUMP
+	} else {
+		t = criurpc.CriuReqType_DUMP
+	}
 	req := &criurpc.CriuReq{
 		Type: &t,
 		Opts: &rpcOpts,
@@ -856,6 +866,8 @@ func (c *linuxContainer) criuSwrk(process *Process, req *criurpc.CriuReq, opts *
 		case t == criurpc.CriuReqType_RESTORE:
 		case t == criurpc.CriuReqType_DUMP:
 			break
+		case t == criurpc.CriuReqType_PRE_DUMP:
+			return nil
 		default:
 			return fmt.Errorf("unable to parse the response %s", resp.String())
 		}

@@ -25,6 +25,9 @@ type VethPairName struct {
 type CriuOpts struct {
 	ImagesDirectory         string             // directory for storing image files
 	WorkDirectory           string             // directory to cd and write logs/pidfiles/stats to
+	PrevImagesDirectory     string             // directory for storing image files
+	PreDump                 bool               // pre-dump task(s) minimizing their frozen time
+	TrackMem                bool               // turn on memory changes tracker in kernel
 	LeaveRunning            bool               // leave container in running state after checkpoint
 	TcpEstablished          bool               // checkpoint/restore established TCP connections
 	ExternalUnixConnections bool               // allow external unix connections
@@ -33,5 +36,5 @@ type CriuOpts struct {
 	PageServer              CriuPageServerInfo // allow to dump to criu page server
 	VethPairs               []VethPairName     // pass the veth to criu when restore
 	ManageCgroupsMode       cg_mode            // dump or restore cgroup mode
-	EmptyNs	                uint32             // don't restore properties for these namespaces
+	EmptyNs                 uint32             // don't restore properties for these namespaces
 }
