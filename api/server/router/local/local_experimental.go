@@ -14,9 +14,9 @@ import (
 
 func addExperimentalRoutes(r *router) {
 	newRoutes := []dkrouter.Route{
-		NewPostRoute("/checkpoints/{name:.*}/checkpoint", r.postContainersCheckpoint),
+		NewPostRoute("/containers/{name:.*}/checkpoint", r.postContainersCheckpoint),
 		NewPostRoute("/containers/{name:.*}/restore", r.postContainersRestore),
-		NewDeleteRoute("/checkpoints/{name:.*}/checkpoint", r.deleteContainersCheckpoint),
+		NewDeleteRoute("/containers/{name:.*}/checkpoint", r.deleteContainersCheckpoint),
 	}
 
 	r.routes = append(r.routes, newRoutes...)
