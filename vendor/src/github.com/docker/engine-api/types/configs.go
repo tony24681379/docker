@@ -45,6 +45,7 @@ type CriuConfig struct {
 	PrevImagesDirectory string
 	PreDump             bool
 	TrackMem            bool
+	AutoDedup           bool
 	LeaveRunning        bool
 }
 

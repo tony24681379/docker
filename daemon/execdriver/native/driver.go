@@ -334,6 +334,7 @@ func libcontainerCriuOpts(containerOpts *types.CriuConfig) *libcontainer.CriuOpt
 		PrevImagesDirectory:     containerOpts.PrevImagesDirectory,
 		PreDump:                 containerOpts.PreDump,
 		TrackMem:                containerOpts.TrackMem,
+		AutoDedup:               containerOpts.AutoDedup,
 		TcpEstablished:          true,
 		ExternalUnixConnections: true,
 		FileLocks:               true,

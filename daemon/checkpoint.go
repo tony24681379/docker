@@ -52,12 +52,11 @@ func (daemon *Daemon) CheckpointCreate(name string, opts *types.CriuConfig) erro
 
 // CheckpointRemove remove container checkpoint
 func (daemon *Daemon) CheckpointRemove(name string, imagesDirectory string) error {
-	container, err := daemon.GetContainer(name)
-	if err != nil {
-		return err
-	}
-
 	if imagesDirectory == "" {
+		container, err := daemon.GetContainer(name)
+		if err != nil {
+			return err
+		}
 		imagesDirectory = filepath.Join(container.Root, "criu.image")
 	}
 	if err := os.RemoveAll(imagesDirectory); err != nil && !os.IsExist(err) {

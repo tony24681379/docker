@@ -28,6 +28,7 @@ type CriuOpts struct {
 	PrevImagesDirectory     string             // directory for storing image files
 	PreDump                 bool               // pre-dump task(s) minimizing their frozen time
 	TrackMem                bool               // turn on memory changes tracker in kernel
+	AutoDedup               bool               // merge parent images of previous dump
 	LeaveRunning            bool               // leave container in running state after checkpoint
 	TcpEstablished          bool               // checkpoint/restore established TCP connections
 	ExternalUnixConnections bool               // allow external unix connections

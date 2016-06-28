@@ -498,6 +498,7 @@ func (c *linuxContainer) Checkpoint(criuOpts *CriuOpts) error {
 		ImagesDirFd:    proto.Int32(int32(imageDir.Fd())),
 		WorkDirFd:      proto.Int32(int32(workDir.Fd())),
 		TrackMem:       proto.Bool(criuOpts.TrackMem),
+		AutoDedup:      proto.Bool(criuOpts.AutoDedup),
 		LogLevel:       proto.Int32(4),
 		LogFile:        proto.String("dump.log"),
 		Root:           proto.String(c.config.Rootfs),

@@ -20,6 +20,7 @@ func (cli *DockerCli) CmdCheckpoint(args ...string) error {
 	flPrevImagesDir := cmd.String([]string{"-prev-image-dir"}, "", "directory for storing prev-image files")
 	flPreDump := cmd.Bool([]string{"-pre-dump"}, false, "pre-dump task(s) minimizing their frozen time")
 	flTrackMem := cmd.Bool([]string{"-track-mem"}, false, "turn on memory changes tracker in kernel")
+	flAutoDedup := cmd.Bool([]string{"-auto-dedup"}, false, "merge parent images of previous dump")
 	flLeaveRunning := cmd.Bool([]string{"-leave-running"}, false, "leave the container running after checkpoint")
 
 	cmd.Require(flag.Min, 1)
@@ -37,6 +38,7 @@ func (cli *DockerCli) CmdCheckpoint(args ...string) error {
 		PrevImagesDirectory: *flPrevImagesDir,
 		PreDump:             *flPreDump,
 		TrackMem:            *flTrackMem,
+		AutoDedup:           *flAutoDedup,
 		LeaveRunning:        *flLeaveRunning,
 	}
 
